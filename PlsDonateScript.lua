@@ -1,4 +1,3 @@
--- Feed the Cat – Pls Donate Script (PlayerGui Version)
 getgenv().catFeedEnabled = true
 getgenv().showGUI = true
 getgenv().showRaised = true
@@ -7,9 +6,7 @@ getgenv().boothTextEnabled = true
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
-local catFeedEnabled = getgenv().catFeedEnabled
-local lastDonation, totalRaised = 0, 0
-local raisedGUI = nil
+local raisedGUI, lastDonation, totalRaised = nil, 0, 0
 
 local donationChat = {
     "She’s still waiting for her meal 🐾",
@@ -65,7 +62,7 @@ local function playEmote()
 end
 
 local function stopEmotesOnMove()
-    while catFeedEnabled do
+    while getgenv().catFeedEnabled do
         task.wait(0.5)
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
         if hum and hum.MoveDirection.Magnitude > 0 then
@@ -109,25 +106,27 @@ local function setBoothText(booth)
 end
 
 local function trackRaised()
-    local success, err = pcall(function()
-        local stat = LocalPlayer:WaitForChild("leaderstats"):WaitForChild("Raised")
-        lastDonation = tonumber(stat.Value) or 0
-        totalRaised = lastDonation
-        stat:GetPropertyChangedSignal("Value"):Connect(function()
-            local newVal = tonumber(stat.Value) or 0
-            local gained = newVal - lastDonation
-            if gained > 0 then
-                lastDonation = newVal
-                totalRaised = totalRaised + gained
-                say(thankChat[math.random(1, #thankChat)])
-                say("+" .. tostring(gained) .. " R$ received. Thank you!")
-                if getgenv().showRaised and raisedGUI then
-                    raisedGUI.Text = "Raised: " .. tostring(totalRaised) .. " R$"
+    coroutine.wrap(function()
+        local success, err = pcall(function()
+            local stat = LocalPlayer:WaitForChild("leaderstats"):WaitForChild("Raised")
+            lastDonation = tonumber(stat.Value) or 0
+            totalRaised = lastDonation
+            stat:GetPropertyChangedSignal("Value"):Connect(function()
+                local newVal = tonumber(stat.Value) or 0
+                local gained = newVal - lastDonation
+                if gained > 0 then
+                    lastDonation = newVal
+                    totalRaised = totalRaised + gained
+                    say(thankChat[math.random(1, #thankChat)])
+                    say("+" .. tostring(gained) .. " R$ received. Thank you!")
+                    if getgenv().showRaised and raisedGUI then
+                        raisedGUI.Text = "Raised: " .. tostring(totalRaised) .. " R$"
+                    end
                 end
-            end
+            end)
         end)
-    end)
-    if not success then warn("Failed to track donations", err) end
+        if not success then warn("Failed to track donations", err) end
+    end)()
 end
 
 local function someoneNearby()
@@ -143,7 +142,7 @@ local function someoneNearby()
     return false
 end
 
--- 🟢 GUI (Now using PlayerGui)
+-- GUI
 if LocalPlayer:FindFirstChild("PlayerGui"):FindFirstChild("CatFeedControls") then
     LocalPlayer.PlayerGui.CatFeedControls:Destroy()
 end
@@ -160,9 +159,9 @@ if getgenv().showGUI then
     toggle.BackgroundColor3 = Color3.fromRGB(255, 200, 150)
     toggle.TextColor3 = Color3.new(0, 0, 0)
     toggle.MouseButton1Click:Connect(function()
-        catFeedEnabled = not catFeedEnabled
-        toggle.Text = "AutoChat: " .. (catFeedEnabled and "ON" or "OFF")
-        if raisedGUI then raisedGUI.Visible = catFeedEnabled end
+        getgenv().catFeedEnabled = not getgenv().catFeedEnabled
+        toggle.Text = "AutoChat: " .. (getgenv().catFeedEnabled and "ON" or "OFF")
+        if raisedGUI then raisedGUI.Visible = getgenv().catFeedEnabled end
     end)
 
     local closeBtn = Instance.new("TextButton", screen)
@@ -188,40 +187,40 @@ if getgenv().showRaised then
     raisedGUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- 🧠 Start Threads
-if catFeedEnabled then
-    task.spawn(function()
+-- Threads
+if getgenv().catFeedEnabled then
+    coroutine.wrap(function()
         while task.wait(math.random(65, 90)) do
-            if not catFeedEnabled then break end
+            if not getgenv().catFeedEnabled then break end
             say(donationChat[math.random(1, #donationChat)])
             playEmote()
         end
-    end)
+    end)()
 
-    task.spawn(function()
+    coroutine.wrap(function()
         while task.wait(math.random(100, 140)) do
-            if not catFeedEnabled then break end
+            if not getgenv().catFeedEnabled then break end
             if someoneNearby() then
                 say(attractChat[math.random(1, #attractChat)])
             end
         end
-    end)
+    end)()
 
-    task.spawn(stopEmotesOnMove)
+    coroutine.wrap(stopEmotesOnMove)()
 
-    task.spawn(function()
+    coroutine.wrap(function()
         local booth = moveToBooth()
         if booth and getgenv().boothTextEnabled then
             setBoothText(booth)
         end
         while task.wait(30) do
-            if not catFeedEnabled then break end
+            if not getgenv().catFeedEnabled then break end
             booth = moveToBooth()
             if booth and getgenv().boothTextEnabled then
                 setBoothText(booth)
             end
         end
-    end)
+    end)()
 
-    task.spawn(trackRaised)
+    trackRaised()
 end
