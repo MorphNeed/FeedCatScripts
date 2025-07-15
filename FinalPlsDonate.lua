@@ -1,243 +1,147 @@
--- FeedTheCat - Delta Compatible Final Version by bonpan
--- Semua fitur dapat diaktifkan/ditonaktifkan via getgenv()
+--[[
+Feed The Cat GUI Script v2
+Tema: Makanan Kucing 🐱
+Desain: Mirip GUI Goomba Hub
+Kompatibel: 100% Delta Mobile
+]]
 
-getgenv().catFeedEnabled = true
-getgenv().autoChatEnabled = true
-getgenv().attractChatEnabled = true
-getgenv().autoEmoteEnabled = true
-getgenv().autoThankEnabled = true
-getgenv().boothTextEnabled = true
-getgenv().autoBoothMoveEnabled = true
-getgenv().showGUI = true
-getgenv().showRaised = true
+-- === UI Library Setup ===
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+local Window = OrionLib:MakeWindow({
+    Name = "🐾 Feed The Cat GUI",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "FeedCatConfig"
+})
 
+-- === Default Settings ===
+getgenv().AutoInvite = true
+getgenv().AutoThank = true
+getgenv().ChatInterval = 35
+getgenv().InviteMessages = {
+    "Help feed my virtual cat 🐱 1 Robux = 1 cat snack!",
+    "Stop by my booth to support my hungry pixel cat 🐟",
+    "Every Robux helps! Drop by if you care about cats 😸"
+}
+getgenv().ThankYouMessages = {
+    "Thanks {user}! My cat just had a snack 🐾",
+    "{user} fed my cat! You're amazing 🐟",
+    "Appreciate it {user}! Meow~ 😻"
+}
+
+-- === Chat Function ===
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer = Players.LocalPlayer
-local raisedGUI, lastDonation, totalRaised = nil, 0, 0
-
-local donationChat = {
-    "She’s still waiting for her meal 🐾",
-    "One pass = one full bowl 🍽️",
-    "Feeding just one cat can mean a lot 🐱",
-    "Your kindness fills her bowl 🦡",
-    "Not every paw gets to eat... but you can change that 🐾",
-    "Help her eat today. That’s all 🐿"
-}
-
-local attractChat = {
-    "Feel free to stop by 🐾 I made something warm for you",
-    "You’re welcome to visit my little booth 🐱",
-    "Passing by? Take a look — she’s waiting 💖",
-    "Just here sharing kindness today. Come say hi! 🐾"
-}
-
-local thankChat = {
-    "Thank you so much! That meal means a lot 🐾",
-    "Truly grateful — she can eat today thanks to you! 🦡",
-    "You just made her day better. Thank you! 🐱",
-    "Kindness like yours keeps her fed. Thanks! 💖"
-}
-
-local boothMessages = {
-    "Help her eat today 🍽️",
-    "Support her next meal 🐾",
-    "One pass = one warm bowl 💖",
-    "Every R$ fills her dish 🐱"
-}
-
-local emotes = { "507770239", "507770677", "507770818" }
-
-local function safeChar()
-    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-end
-
-local function say(msg)
-    local chat = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents"):FindFirstChild("SayMessageRequest")
-    if chat then chat:FireServer(msg, "All") end
-end
-
-local function playEmote()
-    if not getgenv().autoEmoteEnabled then return end
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-    if hum then
-        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-            if track.IsPlaying then return end
-        end
-        local anim = Instance.new("Animation")
-        anim.AnimationId = "rbxassetid://" .. emotes[math.random(1, #emotes)]
-        hum:LoadAnimation(anim):Play()
-    end
-end
-
-local function stopEmotesOnMove()
-    while getgenv().catFeedEnabled and getgenv().autoEmoteEnabled do
-        task.wait(0.5)
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-        if hum and hum.MoveDirection.Magnitude > 0 then
-            for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                track:Stop()
-            end
-        end
-    end
-end
-
-local function moveToBooth()
-    for i = 1, 10 do
-        for _, booth in ipairs(workspace:GetDescendants()) do
-            if booth:IsA("Model") and booth:FindFirstChild("Owner") and booth.Owner:IsA("StringValue") and booth.Owner.Value == LocalPlayer.Name then
-                local boothPart = booth:FindFirstChild("Booth")
-                local root = safeChar()
-                if boothPart and boothPart:IsA("BasePart") and root then
-                    if (root.Position - boothPart.Position).Magnitude > 5 then
-                        root.CFrame = boothPart.CFrame + boothPart.CFrame.LookVector * -3 + Vector3.new(0, 2.5, 0)
-                    end
-                    return booth
-                end
-            end
-        end
-        task.wait(2)
-    end
-    return nil
-end
-
-local function setBoothText(booth)
-    if booth and booth:FindFirstChild("Sign") then
-        local sign = booth.Sign
-        if sign:IsA("MeshPart") and sign:FindFirstChild("SurfaceGui") then
-            local textLabel = sign.SurfaceGui:FindFirstChildWhichIsA("TextLabel")
-            if textLabel then
-                textLabel.Text = boothMessages[math.random(1, #boothMessages)]
-            end
-        end
-    end
-end
-
-local function trackRaised()
-    local success, err = pcall(function()
-        local stat = LocalPlayer:WaitForChild("leaderstats"):WaitForChild("Raised")
-        lastDonation = tonumber(stat.Value) or 0
-        totalRaised = lastDonation
-        stat:GetPropertyChangedSignal("Value"):Connect(function()
-            if not getgenv().autoThankEnabled then return end
-            local newVal = tonumber(stat.Value) or 0
-            local gained = newVal - lastDonation
-            if gained > 0 then
-                lastDonation = newVal
-                totalRaised = totalRaised + gained
-                say(thankChat[math.random(1, #thankChat)])
-                say("+" .. tostring(gained) .. " R$ received. Thank you!")
-                if getgenv().showRaised and raisedGUI then
-                    raisedGUI.Text = "Raised: " .. tostring(totalRaised) .. " R$"
-                end
-            end
-        end)
-    end)
-    if not success then warn("Failed to track donations", err) end
-end
-
-local function someoneNearby()
-    local root = safeChar()
-    if not root then return false end
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            if (p.Character.HumanoidRootPart.Position - root.Position).Magnitude < 10 then
-                return true
-            end
-        end
-    end
-    return false
-end
-
--- GUI SETUP
-if getgenv().showGUI and LocalPlayer:FindFirstChild("PlayerGui"):FindFirstChild("CatFeedControls") then
-    LocalPlayer.PlayerGui.CatFeedControls:Destroy()
-end
-
-if getgenv().showGUI then
-    local screen = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-    screen.Name = "CatFeedControls"
-    screen.ResetOnSpawn = false
-
-    local toggle = Instance.new("TextButton", screen)
-    toggle.Size = UDim2.new(0, 120, 0, 35)
-    toggle.Position = UDim2.new(0, 10, 0, 10)
-    toggle.Text = "AutoChat: ON"
-    toggle.BackgroundColor3 = Color3.fromRGB(255, 200, 150)
-    toggle.TextColor3 = Color3.new(0, 0, 0)
-    toggle.MouseButton1Click:Connect(function()
-        getgenv().catFeedEnabled = not getgenv().catFeedEnabled
-        toggle.Text = "AutoChat: " .. (getgenv().catFeedEnabled and "ON" or "OFF")
-        if raisedGUI then raisedGUI.Visible = getgenv().catFeedEnabled end
-    end)
-
-    local closeBtn = Instance.new("TextButton", screen)
-    closeBtn.Size = UDim2.new(0, 30, 0, 30)
-    closeBtn.Position = UDim2.new(0, 140, 0, 10)
-    closeBtn.Text = "✕"
-    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 150)
-    closeBtn.TextColor3 = Color3.new(0, 0, 0)
-    closeBtn.MouseButton1Click:Connect(function()
-        screen:Destroy()
-        if raisedGUI then raisedGUI.Visible = false end
+local LP = Players.LocalPlayer
+local function safeChat(msg)
+    pcall(function()
+        game.ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
     end)
 end
 
-if getgenv().showRaised then
-    raisedGUI = Instance.new("TextLabel")
-    raisedGUI.Size = UDim2.new(0, 160, 0, 30)
-    raisedGUI.Position = UDim2.new(1, -170, 0, 10)
-    raisedGUI.AnchorPoint = Vector2.new(0, 0)
-    raisedGUI.Text = "Raised: 0 R$"
-    raisedGUI.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
-    raisedGUI.TextColor3 = Color3.fromRGB(0, 0, 0)
-    raisedGUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
-end
+-- === Main Tab ===
+local MainTab = Window:MakeTab({Name = "Main", Icon = "rbxassetid://7734053494", PremiumOnly = false})
 
--- MAIN LOOP
-if getgenv().catFeedEnabled then
-    if getgenv().autoChatEnabled then
-        task.spawn(function()
-            while getgenv().catFeedEnabled do
-                task.wait(math.random(60, 90))
-                say(donationChat[math.random(1, #donationChat)])
-                playEmote()
-            end
-        end)
+MainTab:AddToggle({
+    Name = "Auto Invite (Promote Booth)",
+    Default = getgenv().AutoInvite,
+    Callback = function(v) getgenv().AutoInvite = v end
+})
+
+MainTab:AddToggle({
+    Name = "Auto Thank Donators",
+    Default = getgenv().AutoThank,
+    Callback = function(v) getgenv().AutoThank = v end
+})
+
+MainTab:AddSlider({
+    Name = "Chat Delay (Seconds)",
+    Min = 10,
+    Max = 120,
+    Default = getgenv().ChatInterval,
+    Increment = 5,
+    ValueName = "s",
+    Callback = function(v) getgenv().ChatInterval = v end
+})
+
+-- === Text Tab ===
+local TextTab = Window:MakeTab({Name = "Text Settings", Icon = "rbxassetid://7733960981", PremiumOnly = false})
+
+TextTab:AddTextbox({
+    Name = "Add Invite Message",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(txt)
+        table.insert(getgenv().InviteMessages, txt)
+    end
+})
+
+TextTab:AddTextbox({
+    Name = "Add Thank You Message (use {user})",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(txt)
+        table.insert(getgenv().ThankYouMessages, txt)
+    end
+})
+
+-- === Misc Tab ===
+local MiscTab = Window:MakeTab({Name = "Misc", Icon = "rbxassetid://7733658505", PremiumOnly = false})
+
+MiscTab:AddButton({
+    Name = "Send Test Chat",
+    Callback = function() safeChat("Test: Feed the cat 🐱") end
+})
+
+MiscTab:AddButton({
+    Name = "Reset GUI Position",
+    Callback = function() OrionLib:Destroy() end
+})
+
+-- === Invite Chat Loop ===
+task.spawn(function()
+    while task.wait(1) do
+        if getgenv().AutoInvite then
+            local msg = getgenv().InviteMessages[math.random(1, #getgenv().InviteMessages)]
+            safeChat(msg)
+            wait(getgenv().ChatInterval)
+        end
+    end
+end)
+
+-- === Donation Monitor ===
+local function monitorBooth()
+    local booth
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and v:FindFirstChild("Owner") and tostring(v.Owner.Value) == LP.Name then
+            booth = v
+            break
+        end
+    end
+    if not booth then return end
+
+    local oldRaised = 0
+    if booth:FindFirstChild("Raised") then
+        oldRaised = tonumber(booth.Raised.Value) or 0
     end
 
-    if getgenv().attractChatEnabled then
-        task.spawn(function()
-            while getgenv().catFeedEnabled do
-                task.wait(math.random(100, 140))
-                if someoneNearby() then
-                    say(attractChat[math.random(1, #attractChat)])
+    booth.Raised.Changed:Connect(function()
+        local newVal = tonumber(booth.Raised.Value) or 0
+        if newVal > oldRaised and getgenv().AutoThank then
+            local donor = "Someone"
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= LP and plr:DistanceFromCharacter(LP.Character.HumanoidRootPart.Position) < 15 then
+                    donor = plr.Name break
                 end
             end
-        end)
-    end
-
-    if getgenv().autoEmoteEnabled then
-        task.spawn(stopEmotesOnMove)
-    end
-
-    if getgenv().autoBoothMoveEnabled then
-        task.spawn(function()
-            local booth = moveToBooth()
-            if booth and getgenv().boothTextEnabled then
-                setBoothText(booth)
-            end
-            while getgenv().catFeedEnabled do
-                task.wait(30)
-                booth = moveToBooth()
-                if booth and getgenv().boothTextEnabled then
-                    setBoothText(booth)
-                end
-            end
-        end)
-    end
-
-    if getgenv().autoThankEnabled then
-        task.spawn(trackRaised)
-    end
+            local msg = getgenv().ThankYouMessages[math.random(1, #getgenv().ThankYouMessages)]
+            safeChat(msg:gsub("{user}", donor))
+        end
+        oldRaised = newVal
+    end)
 end
+
+task.delay(5, function()
+    pcall(monitorBooth)
+end)
+
+OrionLib:Init()
